@@ -16,6 +16,7 @@ const ui = {
   backendStatusElapsed: document.getElementById("backend-status-elapsed"),
   backendStatusEta: document.getElementById("backend-status-eta"),
   backendStatusTimeout: document.getElementById("backend-status-timeout"),
+  backendStatusShimmer: document.getElementById("backend-status-shimmer"),
   globalBanner: document.getElementById("global-banner"),
   voiceSelect: document.getElementById("voice-select"),
   speedInput: document.getElementById("speed-input"),
@@ -30,8 +31,15 @@ const ui = {
   cloneSpeedInput: document.getElementById("clone-speed-input"),
   cloneFormatSelect: document.getElementById("clone-format-select"),
   cloneBtn: document.getElementById("clone-btn"),
+  toggleClonePanelBtn: document.getElementById("toggle-clone-panel-btn"),
+  clonePanel: document.getElementById("clone-panel"),
+  resultPanel: document.getElementById("result-panel"),
   resultKind: document.getElementById("result-kind"),
   resultMessage: document.getElementById("result-message"),
+  resultSubcopy: document.getElementById("result-subcopy"),
+  resultChip: document.getElementById("result-chip"),
+  resultEmptyState: document.getElementById("result-empty-state"),
+  resultLoadingState: document.getElementById("result-loading-state"),
   audioPlayer: document.getElementById("audio-player"),
   playBtn: document.getElementById("play-btn"),
   stopBtn: document.getElementById("stop-btn"),
@@ -41,6 +49,7 @@ const ui = {
 let backendProgressTimerId = 0;
 let activeRequestId = "";
 let activeRequestController = null;
+let clonePanelVisible = false;
 
 ui.apiBaseUrl.textContent = window.APP_CONFIG.API_BASE_URL;
 
@@ -48,6 +57,8 @@ function render(state) {
   ui.backendStatusText.textContent = backendHeadline(state.backend.status);
   ui.backendStatusDetail.textContent = state.backend.detail;
   ui.backendStatusCard.className = `status-card status-${state.backend.status}`;
+  ui.backendStatusCard.dataset.busy = state.busy ? "true" : "false";
+  ui.backendStatusShimmer.hidden = !(state.pendingAction === "refresh" || state.pendingAction === "synthesize" || state.pendingAction === "clone");
   if (state.backend.progressText) {
     ui.backendStatusProgress.hidden = false;
     const progressRatio = getProgressRatio(state.backend.progressElapsedMs, state.backend.progressEstimatedMs);
@@ -85,6 +96,10 @@ function render(state) {
   ui.cloneBtn.textContent = state.pendingAction === "clone" ? "Đang clone..." : "Clone";
   ui.refreshStatusBtn.textContent = state.pendingAction === "refresh" ? "Đang refresh..." : "Refresh";
 
+  if (state.pendingAction === "clone") {
+    setClonePanelVisibility(true);
+  }
+
   if (!state.voices.length) {
     ui.voiceSelect.innerHTML = `<option value="">Chưa có voice</option>`;
   } else {
@@ -98,20 +113,44 @@ function render(state) {
   }
 
   if (state.result.blob) {
+    ui.resultPanel.dataset.state = "ready";
     ui.resultKind.textContent = state.result.kind === "clone" ? "Audio clone" : "Audio synthesize";
     ui.resultMessage.textContent = `Đã tạo ${state.result.filename} (${formatBytes(state.result.sizeBytes)}).`;
+    ui.resultSubcopy.textContent = "Audio đã sẵn sàng để nghe thử, dừng hoặc tải xuống ngay.";
+    ui.resultChip.textContent = "Audio ready";
+    ui.resultEmptyState.hidden = true;
+    ui.resultLoadingState.hidden = true;
     ui.playBtn.disabled = false;
     ui.stopBtn.disabled = false;
     ui.downloadBtn.disabled = false;
     ui.downloadBtn.textContent = `Download ${state.result.format.toUpperCase()}`;
   } else {
+    const isGenerating = state.pendingAction === "synthesize" || state.pendingAction === "clone";
+    ui.resultPanel.dataset.state = isGenerating ? "loading" : "empty";
     ui.resultKind.textContent = "Chưa có audio";
-    ui.resultMessage.textContent = "Kết quả audio sẽ xuất hiện ở đây sau khi synthesize hoặc clone thành công.";
+    ui.resultMessage.textContent = isGenerating
+      ? "Hệ thống đang tạo audio, player sẽ được cập nhật ngay khi xử lý xong."
+      : "Kết quả audio sẽ xuất hiện ở đây sau khi synthesize hoặc clone thành công.";
+    ui.resultSubcopy.textContent = isGenerating
+      ? "Đang render bản ghi và chuẩn bị file WAV để preview."
+      : "Nghe trực tiếp và tải file WAV sau khi xử lý xong.";
+    ui.resultChip.textContent = isGenerating ? "Rendering audio" : "Waiting for audio";
+    ui.resultEmptyState.hidden = isGenerating;
+    ui.resultLoadingState.hidden = !isGenerating;
     ui.playBtn.disabled = true;
     ui.stopBtn.disabled = true;
     ui.downloadBtn.disabled = true;
     ui.downloadBtn.textContent = "Download Audio";
   }
+}
+
+function setClonePanelVisibility(visible) {
+  clonePanelVisible = visible;
+  ui.clonePanel.hidden = !visible;
+  ui.toggleClonePanelBtn.setAttribute("aria-expanded", String(visible));
+  ui.toggleClonePanelBtn.innerHTML = visible
+    ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4" aria-hidden="true"><path d="M5 12h14"/></svg>Ẩn Flow 02`
+    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>Hiện Flow 02`;
 }
 
 function backendHeadline(status) {
@@ -435,6 +474,9 @@ function boot() {
   });
   ui.synthesizeForm.addEventListener("submit", handleSynthesize);
   ui.cloneForm.addEventListener("submit", handleClone);
+  ui.toggleClonePanelBtn.addEventListener("click", () => {
+    setClonePanelVisibility(!clonePanelVisible);
+  });
   ui.cancelRequestBtn.addEventListener("click", handleCancelCurrentRequest);
   ui.playBtn.addEventListener("click", () => playAudio());
   ui.stopBtn.addEventListener("click", () => stopAudio());
@@ -451,6 +493,7 @@ function boot() {
   });
 
   beginAction("refresh");
+  setClonePanelVisibility(false);
   Promise.all([loadBackendStatus(), loadVoices()])
     .finally(() => {
       finishAction();
