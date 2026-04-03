@@ -138,6 +138,52 @@ class LocalApiTests(unittest.TestCase):
         self.assertEqual(data["error"]["code"], "VALIDATION_ERROR")
         self.assertIn("request_id", data["error"])
 
+    def test_cancel_current_request(self) -> None:
+        request_id = f"req-test-{uuid.uuid4().hex[:8]}"
+        result: dict[str, object] = {}
+
+        def run_synthesize() -> None:
+            payload = json.dumps(
+                {
+                    "text": "Xin chao Anh " * 5000,
+                    "voice_id": "xuan_vinh",
+                    "speed": 0.5,
+                    "format": "wav",
+                }
+            ).encode()
+            status, _, body = self.request(
+                "POST",
+                "/v1/synthesize",
+                body=payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Request-Id": request_id,
+                },
+            )
+            result["status"] = status
+            result["body"] = body
+
+        worker = threading.Thread(target=run_synthesize, daemon=True)
+        worker.start()
+        time.sleep(0.05)
+
+        cancel_payload = json.dumps({"request_id": request_id}).encode()
+        cancel_status, _, cancel_body = self.request(
+            "POST",
+            "/v1/cancel-current",
+            body=cancel_payload,
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(cancel_status, 200)
+        cancel_data = json.loads(cancel_body.decode())
+        self.assertTrue(cancel_data["cancelled"])
+        self.assertEqual(cancel_data["request_id"], request_id)
+
+        worker.join(timeout=2)
+        self.assertEqual(result["status"], 499)
+        error_payload = json.loads(result["body"].decode())
+        self.assertEqual(error_payload["error"]["code"], "CANCELLED")
+
 
 if __name__ == "__main__":
     unittest.main()

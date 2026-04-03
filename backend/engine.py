@@ -123,9 +123,9 @@ class MockVieneuAdapter(BaseTtsAdapter):
             for index in range(total_frames):
                 if cancel_event.is_set():
                     raise ApiError(
-                        code="TIMEOUT",
-                        message="Yêu cầu suy luận đã bị hủy do timeout.",
-                        status_code=504,
+                        code="CANCELLED",
+                        message="Yêu cầu suy luận đã bị hủy.",
+                        status_code=499,
                     )
 
                 if index % 2048 == 0:
@@ -295,8 +295,12 @@ class EngineService:
         self._config = config
         self._adapter = build_adapter(config)
         self._lock = threading.RLock()
+        self._state_lock = threading.Lock()
         self._default_voice = "xuan_vinh"
         self._model_loaded = not isinstance(self._adapter, UnsupportedUpstreamAdapter)
+        self._current_request_id: str | None = None
+        self._current_action: str | None = None
+        self._current_cancel_event: threading.Event | None = None
 
     def health(self, *, api_enabled: bool) -> dict[str, object]:
         active_backend = "mock"
@@ -324,6 +328,7 @@ class EngineService:
     def synthesize(
         self,
         *,
+        request_id: str,
         text: str,
         voice_id: str | None,
         speed: float,
@@ -338,12 +343,15 @@ class EngineService:
                 speed=speed,
                 audio_format=audio_format,
                 cancel_event=cancel_event,
-            )
+            ),
+            request_id=request_id,
+            action="synthesize",
         )
 
     def clone(
         self,
         *,
+        request_id: str,
         text: str,
         ref_text: str,
         ref_audio_name: str,
@@ -361,8 +369,38 @@ class EngineService:
                 speed=speed,
                 audio_format=audio_format,
                 cancel_event=cancel_event,
-            )
+            ),
+            request_id=request_id,
+            action="clone",
         )
+
+    def cancel_current(self, request_id: str | None = None) -> dict[str, object]:
+        with self._state_lock:
+            current_cancel_event = self._current_cancel_event
+            current_request_id = self._current_request_id
+            current_action = self._current_action
+
+            if current_cancel_event is None or current_request_id is None or current_action is None:
+                return {
+                    "cancelled": False,
+                    "request_id": request_id or "",
+                    "message": "Không có request đang chạy.",
+                }
+
+            if request_id and request_id != current_request_id:
+                return {
+                    "cancelled": False,
+                    "request_id": current_request_id,
+                    "message": "Request đang chạy không khớp với request_id cần hủy.",
+                }
+
+            current_cancel_event.set()
+            return {
+                "cancelled": True,
+                "request_id": current_request_id,
+                "action": current_action,
+                "message": "Đã gửi lệnh hủy tới backend.",
+            }
 
     def _ensure_ready(self) -> None:
         if not self._model_loaded:
@@ -372,7 +410,7 @@ class EngineService:
                 status_code=503,
             )
 
-    def _run_with_timeout(self, operation) -> bytes:
+    def _run_with_timeout(self, operation, *, request_id: str, action: str) -> bytes:
         result_queue: Queue[object] = Queue(maxsize=1)
         cancel_event = threading.Event()
 
@@ -384,29 +422,40 @@ class EngineService:
                 result_queue.put(error)
 
         thread = threading.Thread(target=worker, daemon=True)
+        with self._state_lock:
+            self._current_request_id = request_id
+            self._current_action = action
+            self._current_cancel_event = cancel_event
         thread.start()
         thread.join(timeout=self._config.request_timeout_seconds)
 
-        if thread.is_alive():
-            cancel_event.set()
-            raise ApiError(
-                code="TIMEOUT",
-                message="Suy luận vượt quá thời gian chờ của server.",
-                status_code=504,
-            )
+        try:
+            if thread.is_alive():
+                cancel_event.set()
+                raise ApiError(
+                    code="TIMEOUT",
+                    message="Suy luận vượt quá thời gian chờ của server.",
+                    status_code=504,
+                )
 
-        result = result_queue.get()
-        if isinstance(result, Exception):
-            if isinstance(result, ApiError):
-                raise result
-            raise ApiError(
-                code="INFERENCE_FAILED",
-                message="Không thể tạo audio từ engine TTS.",
-                status_code=500,
-                details={"reason": str(result)},
-            ) from result
+            result = result_queue.get()
+            if isinstance(result, Exception):
+                if isinstance(result, ApiError):
+                    raise result
+                raise ApiError(
+                    code="INFERENCE_FAILED",
+                    message="Không thể tạo audio từ engine TTS.",
+                    status_code=500,
+                    details={"reason": str(result)},
+                ) from result
 
-        return result
+            return result
+        finally:
+            with self._state_lock:
+                if self._current_request_id == request_id:
+                    self._current_request_id = None
+                    self._current_action = None
+                    self._current_cancel_event = None
 
 
 def is_supported_audio_file(filename: str, content_type: str) -> bool:

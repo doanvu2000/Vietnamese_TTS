@@ -10,7 +10,7 @@ from .errors import ApiError
 class AppConfig:
     host: str = "127.0.0.1"
     port: int = 8000
-    request_timeout_seconds: float = 30.0
+    request_timeout_seconds: float = 180.0
     allow_lan: bool = False
     version: str = "0.1.0"
     engine_mode: str = "turbo"
@@ -28,7 +28,7 @@ class AppConfig:
         config = cls(
             host=os.getenv("TTS_API_HOST", "127.0.0.1"),
             port=int(os.getenv("TTS_API_PORT", "8000")),
-            request_timeout_seconds=float(os.getenv("TTS_REQUEST_TIMEOUT_SECONDS", "30")),
+            request_timeout_seconds=float(os.getenv("TTS_REQUEST_TIMEOUT_SECONDS", "180")),
             allow_lan=os.getenv("TTS_ALLOW_LAN", "false").lower() in {"1", "true", "yes", "on"},
             version=os.getenv("TTS_API_VERSION", "0.1.0"),
             engine_mode=os.getenv("TTS_ENGINE_MODE", "turbo"),

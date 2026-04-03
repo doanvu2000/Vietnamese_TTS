@@ -1,11 +1,16 @@
 const state = {
   backend: {
     status: "idle",
-    detail: "Chưa kiểm tra backend"
+    detail: "Chưa kiểm tra backend",
+    progressText: "",
+    progressElapsedMs: 0,
+    progressEstimatedMs: 0,
+    progressTimeoutMs: 0
   },
   voices: [],
   selectedVoice: "",
   busy: false,
+  cancelRequested: false,
   pendingAction: "",
   result: {
     kind: "none",

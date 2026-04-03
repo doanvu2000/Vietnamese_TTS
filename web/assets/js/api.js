@@ -1,13 +1,16 @@
 const config = window.APP_CONFIG;
 
-async function request(path, options = {}) {
+async function request(path, options = {}, timeoutMs = config.REQUEST_TIMEOUT_MS) {
+  const { signal: externalSignal, headers: externalHeaders, ...fetchOptions } = options;
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), config.REQUEST_TIMEOUT_MS);
+  const signal = externalSignal ? AbortSignal.any([controller.signal, externalSignal]) : controller.signal;
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(`${config.API_BASE_URL}${path}`, {
-      ...options,
-      signal: controller.signal
+      ...fetchOptions,
+      headers: externalHeaders,
+      signal
     });
 
     if (!response.ok) {
@@ -16,10 +19,17 @@ async function request(path, options = {}) {
 
     return response;
   } catch (error) {
-    if (error.name === "AbortError") {
+    if (externalSignal?.aborted) {
+      throw {
+        code: "CANCELLED",
+        message: "Đã hủy yêu cầu hiện tại."
+      };
+    }
+
+    if (error.name === "AbortError" || controller.signal.aborted) {
       throw {
         code: "TIMEOUT",
-        message: "Request timeout khi gọi desktop local API."
+        message: "Request timeout khi gọi desktop local API. Backend có thể vẫn đang xử lý WAV, hãy tăng timeout nếu model chạy lâu."
       };
     }
 
@@ -55,19 +65,21 @@ export async function getVoices() {
   return response.json();
 }
 
-export async function synthesize(payload) {
+export async function synthesize(payload, requestOptions = {}) {
   const response = await request("/v1/synthesize", {
     method: "POST",
     headers: {
+      "X-Request-Id": requestOptions.requestId || "",
       "Content-Type": "application/json"
     },
-    body: JSON.stringify(payload)
-  });
+    body: JSON.stringify(payload),
+    signal: requestOptions.signal
+  }, requestOptions.timeoutMs);
 
   return response.blob();
 }
 
-export async function cloneVoice({ text, refText, refAudioFile, speed, format }) {
+export async function cloneVoice({ text, refText, refAudioFile, speed, format }, requestOptions = {}) {
   const formData = new FormData();
   formData.append("text", text);
   formData.append("ref_text", refText);
@@ -77,8 +89,24 @@ export async function cloneVoice({ text, refText, refAudioFile, speed, format })
 
   const response = await request("/v1/clone", {
     method: "POST",
-    body: formData
-  });
+    headers: {
+      "X-Request-Id": requestOptions.requestId || ""
+    },
+    body: formData,
+    signal: requestOptions.signal
+  }, requestOptions.timeoutMs);
 
   return response.blob();
+}
+
+export async function cancelCurrent(requestId) {
+  const response = await request("/v1/cancel-current", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ request_id: requestId || "" })
+  }, 10000);
+
+  return response.json();
 }

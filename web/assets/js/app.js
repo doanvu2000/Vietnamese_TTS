@@ -1,13 +1,21 @@
-import { getHealth, getVoices, synthesize, cloneVoice } from "./api.js";
+import { getHealth, getVoices, synthesize, cloneVoice, cancelCurrent } from "./api.js";
 import { getState, setState, updateNestedState, subscribe } from "./state.js";
 import { clearAudioSource, downloadBlob, playAudio, setAudioSource, stopAudio } from "./audio.js";
 
 const ui = {
   apiBaseUrl: document.getElementById("api-base-url"),
   refreshStatusBtn: document.getElementById("refresh-status-btn"),
+  cancelRequestBtn: document.getElementById("cancel-request-btn"),
   backendStatusCard: document.getElementById("backend-status-card"),
   backendStatusText: document.getElementById("backend-status-text"),
   backendStatusDetail: document.getElementById("backend-status-detail"),
+  backendStatusProgress: document.getElementById("backend-status-progress"),
+  backendStatusProgressLabel: document.getElementById("backend-status-progress-label"),
+  backendStatusProgressPercent: document.getElementById("backend-status-progress-percent"),
+  backendStatusProgressFill: document.getElementById("backend-status-progress-fill"),
+  backendStatusElapsed: document.getElementById("backend-status-elapsed"),
+  backendStatusEta: document.getElementById("backend-status-eta"),
+  backendStatusTimeout: document.getElementById("backend-status-timeout"),
   globalBanner: document.getElementById("global-banner"),
   voiceSelect: document.getElementById("voice-select"),
   speedInput: document.getElementById("speed-input"),
@@ -30,12 +38,39 @@ const ui = {
   downloadBtn: document.getElementById("download-btn")
 };
 
+let backendProgressTimerId = 0;
+let activeRequestId = "";
+let activeRequestController = null;
+
 ui.apiBaseUrl.textContent = window.APP_CONFIG.API_BASE_URL;
 
 function render(state) {
   ui.backendStatusText.textContent = backendHeadline(state.backend.status);
   ui.backendStatusDetail.textContent = state.backend.detail;
   ui.backendStatusCard.className = `status-card status-${state.backend.status}`;
+  if (state.backend.progressText) {
+    ui.backendStatusProgress.hidden = false;
+    const progressRatio = getProgressRatio(state.backend.progressElapsedMs, state.backend.progressEstimatedMs);
+    const remainingMs = Math.max((state.backend.progressEstimatedMs || 0) - state.backend.progressElapsedMs, 0);
+    ui.backendStatusProgressLabel.textContent = state.backend.progressText;
+    ui.backendStatusProgressPercent.textContent = `Ước lượng ${Math.round(progressRatio * 100)}%`;
+    ui.backendStatusProgressFill.style.width = `${Math.max(progressRatio * 100, 6)}%`;
+    ui.backendStatusElapsed.textContent = `Đã chạy ${formatElapsed(state.backend.progressElapsedMs)}`;
+    ui.backendStatusEta.textContent = state.backend.progressEstimatedMs > 0
+      ? `Còn khoảng ${formatElapsed(remainingMs)}`
+      : "Đang ước lượng";
+    ui.backendStatusTimeout.textContent = state.backend.progressTimeoutMs > 0
+      ? `Timeout ${formatElapsed(state.backend.progressTimeoutMs)}`
+      : "";
+  } else {
+    ui.backendStatusProgress.hidden = true;
+    ui.backendStatusProgressLabel.textContent = "";
+    ui.backendStatusProgressPercent.textContent = "";
+    ui.backendStatusProgressFill.style.width = "0%";
+    ui.backendStatusElapsed.textContent = "";
+    ui.backendStatusEta.textContent = "";
+    ui.backendStatusTimeout.textContent = "";
+  }
 
   ui.globalBanner.hidden = !state.error;
   ui.globalBanner.textContent = state.error;
@@ -43,6 +78,9 @@ function render(state) {
   ui.synthesizeBtn.disabled = state.busy;
   ui.cloneBtn.disabled = state.busy;
   ui.refreshStatusBtn.disabled = state.busy;
+  ui.cancelRequestBtn.hidden = !(state.pendingAction === "synthesize" || state.pendingAction === "clone");
+  ui.cancelRequestBtn.disabled = !state.busy || state.cancelRequested;
+  ui.cancelRequestBtn.textContent = state.cancelRequested ? "Đang hủy..." : "Cancel";
   ui.synthesizeBtn.textContent = state.pendingAction === "synthesize" ? "Đang synthesize..." : "Synthesize";
   ui.cloneBtn.textContent = state.pendingAction === "clone" ? "Đang clone..." : "Clone";
   ui.refreshStatusBtn.textContent = state.pendingAction === "refresh" ? "Đang refresh..." : "Refresh";
@@ -89,6 +127,22 @@ function backendHeadline(status) {
   }
 }
 
+function formatElapsed(elapsedMs) {
+  const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function getProgressRatio(elapsedMs, estimatedMs) {
+  if (!estimatedMs || estimatedMs <= 0) {
+    return 0.08;
+  }
+
+  const rawRatio = elapsedMs / estimatedMs;
+  return Math.min(Math.max(rawRatio, 0.08), 0.96);
+}
+
 function setBusy(nextBusy) {
   setState({ busy: nextBusy, pendingAction: nextBusy ? getState().pendingAction : "" });
 }
@@ -103,12 +157,88 @@ function beginAction(action) {
 function finishAction() {
   setState({
     busy: false,
+    cancelRequested: false,
     pendingAction: ""
   });
 }
 
 function setError(message = "") {
   setState({ error: message });
+}
+
+function estimateSynthesizeMs(text, speed) {
+  const normalizedSpeed = Math.max(Number(speed) || 1, 0.5);
+  const normalizedText = (text || "").trim();
+  const baseMs = 12000;
+  const perCharMs = 95;
+  return Math.max(20000, Math.round((baseMs + normalizedText.length * perCharMs) / normalizedSpeed));
+}
+
+function estimateCloneMs(text, speed, refAudioFile) {
+  const synthMs = estimateSynthesizeMs(text, speed);
+  const fileSizeBytes = refAudioFile?.size || 0;
+  const refAudioPenaltyMs = Math.round(fileSizeBytes / (1024 * 1024) * 10000);
+  return Math.max(35000, synthMs + 15000 + refAudioPenaltyMs);
+}
+
+function buildRequestTiming(action, payload) {
+  const estimatedMs = action === "clone"
+    ? estimateCloneMs(payload.text, payload.speed, payload.refAudioFile)
+    : estimateSynthesizeMs(payload.text, payload.speed);
+  return {
+    estimatedMs,
+    timeoutMs: estimatedMs + 60000
+  };
+}
+
+function setBackendProgress(progressText = "", progressElapsedMs = 0, progressEstimatedMs = 0, progressTimeoutMs = 0) {
+  updateNestedState("backend", {
+    progressText,
+    progressElapsedMs,
+    progressEstimatedMs,
+    progressTimeoutMs
+  });
+}
+
+function startBackendProgress(action, timing) {
+  const startedAt = Date.now();
+  const progressText =
+    action === "synthesize"
+      ? "Đang synthesize audio"
+      : action === "clone"
+        ? "Đang clone và xuất WAV"
+        : "Đang xử lý";
+
+  if (backendProgressTimerId) {
+    window.clearInterval(backendProgressTimerId);
+  }
+
+  setBackendProgress(progressText, 0, timing.estimatedMs, timing.timeoutMs);
+  backendProgressTimerId = window.setInterval(() => {
+    setBackendProgress(progressText, Date.now() - startedAt, timing.estimatedMs, timing.timeoutMs);
+  }, 1000);
+}
+
+function stopBackendProgress() {
+  if (backendProgressTimerId) {
+    window.clearInterval(backendProgressTimerId);
+    backendProgressTimerId = 0;
+  }
+  setBackendProgress("", 0);
+}
+
+function createRequestContext() {
+  activeRequestId = `req-web-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+  activeRequestController = new AbortController();
+  return {
+    requestId: activeRequestId,
+    controller: activeRequestController
+  };
+}
+
+function clearRequestContext() {
+  activeRequestId = "";
+  activeRequestController = null;
 }
 
 function formatBytes(sizeBytes) {
@@ -194,19 +324,31 @@ async function handleSynthesize(event) {
     validateText(ui.synthesizeText.value, "Text");
     beginAction("synthesize");
     const format = normalizeFormat(ui.synthesizeFormatSelect.value);
+    const timing = buildRequestTiming("synthesize", {
+      text: ui.synthesizeText.value.trim(),
+      speed: Number(ui.speedInput.value || 1)
+    });
+    const requestContext = createRequestContext();
+    startBackendProgress("synthesize", timing);
 
     const blob = await synthesize({
       text: ui.synthesizeText.value.trim(),
       voice_id: getState().selectedVoice || ui.voiceSelect.value,
       speed: Number(ui.speedInput.value || 1),
       format
+    }, {
+      timeoutMs: timing.timeoutMs,
+      requestId: requestContext.requestId,
+      signal: requestContext.controller.signal
     });
 
     setResult(blob, "synthesize", format);
     await playAudio().catch(() => undefined);
   } catch (error) {
-    setError(error.message || "Synthesize thất bại.");
+    setError(error.code === "CANCELLED" ? "Đã hủy yêu cầu synthesize." : (error.message || "Synthesize thất bại."));
   } finally {
+    clearRequestContext();
+    stopBackendProgress();
     finishAction();
   }
 }
@@ -226,20 +368,52 @@ async function handleClone(event) {
 
     beginAction("clone");
     const format = normalizeFormat(ui.cloneFormatSelect.value);
+    const timing = buildRequestTiming("clone", {
+      text: ui.cloneText.value.trim(),
+      speed: Number(ui.cloneSpeedInput.value || 1),
+      refAudioFile
+    });
+    const requestContext = createRequestContext();
+    startBackendProgress("clone", timing);
     const blob = await cloneVoice({
       text: ui.cloneText.value.trim(),
       refText: ui.refText.value.trim(),
       refAudioFile,
       speed: Number(ui.cloneSpeedInput.value || 1),
       format
+    }, {
+      timeoutMs: timing.timeoutMs,
+      requestId: requestContext.requestId,
+      signal: requestContext.controller.signal
     });
 
     setResult(blob, "clone", format);
     await playAudio().catch(() => undefined);
   } catch (error) {
-    setError(error.message || "Clone thất bại.");
+    setError(error.code === "CANCELLED" ? "Đã hủy yêu cầu clone." : (error.message || "Clone thất bại."));
   } finally {
+    clearRequestContext();
+    stopBackendProgress();
     finishAction();
+  }
+}
+
+async function handleCancelCurrentRequest() {
+  if (!activeRequestId || !activeRequestController || getState().cancelRequested) {
+    return;
+  }
+
+  setState({ cancelRequested: true });
+
+  try {
+    const payload = await cancelCurrent(activeRequestId);
+    if (!payload?.cancelled) {
+      throw new Error(payload?.message || "Backend không nhận lệnh hủy.");
+    }
+    activeRequestController.abort("cancelled");
+  } catch (error) {
+    setState({ cancelRequested: false });
+    setError(error.message || "Không hủy được request hiện tại.");
   }
 }
 
@@ -261,6 +435,7 @@ function boot() {
   });
   ui.synthesizeForm.addEventListener("submit", handleSynthesize);
   ui.cloneForm.addEventListener("submit", handleClone);
+  ui.cancelRequestBtn.addEventListener("click", handleCancelCurrentRequest);
   ui.playBtn.addEventListener("click", () => playAudio());
   ui.stopBtn.addEventListener("click", () => stopAudio());
   ui.downloadBtn.addEventListener("click", () => {
@@ -271,6 +446,7 @@ function boot() {
   });
 
   window.addEventListener("beforeunload", () => {
+    stopBackendProgress();
     clearAudioSource(ui.audioPlayer);
   });
 

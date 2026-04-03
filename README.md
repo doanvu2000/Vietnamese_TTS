@@ -14,7 +14,7 @@ Server mặc định bind `127.0.0.1:8000`.
 
 - `TTS_API_HOST`: host bind, mặc định `127.0.0.1`
 - `TTS_API_PORT`: port bind, mặc định `8000`
-- `TTS_REQUEST_TIMEOUT_SECONDS`: timeout inference, mặc định `30`
+- `TTS_REQUEST_TIMEOUT_SECONDS`: timeout inference, mặc định `180`
 - `TTS_ALLOW_LAN`: phải bật `true` nếu bind host khác localhost
 - `TTS_ENGINE_BACKEND`: `mock` mặc định, ngoài ra hỗ trợ `vieneu`, `auto`
 - `HF_TOKEN`: token Hugging Face nếu model riêng tư hoặc môi trường cần xác thực

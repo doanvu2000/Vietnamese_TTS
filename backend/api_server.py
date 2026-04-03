@@ -71,6 +71,7 @@ def build_handler(context: AppContext):
                 if self.path == "/v1/synthesize":
                     payload = self._read_json()
                     audio_bytes = context.engine_service.synthesize(
+                        request_id=request_id,
                         text=self._required_text(payload, "text"),
                         voice_id=self._optional_text(payload, "voice_id"),
                         speed=self._parse_speed(payload.get("speed", 1.0)),
@@ -98,6 +99,7 @@ def build_handler(context: AppContext):
                         )
 
                     audio_bytes = context.engine_service.clone(
+                        request_id=request_id,
                         text=self._required_form_text(form, "text"),
                         ref_text=self._required_form_text(form, "ref_text"),
                         ref_audio_name=ref_audio.filename,
@@ -106,6 +108,17 @@ def build_handler(context: AppContext):
                         audio_format=self._parse_format(self._optional_form_text(form, "format", "wav")),
                     )
                     self._write_audio(audio_bytes, request_id)
+                    return
+
+                if self.path == "/v1/cancel-current":
+                    payload = self._read_json()
+                    self._write_json(
+                        HTTPStatus.OK,
+                        context.engine_service.cancel_current(
+                            self._optional_text(payload, "request_id"),
+                        ),
+                        request_id,
+                    )
                     return
 
                 raise ApiError(

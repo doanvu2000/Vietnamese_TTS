@@ -23,14 +23,31 @@
     </header>
 
     <main class="layout">
-      <section class="panel">
+      <section class="panel workflow-panel clone-panel">
         <div class="panel-header">
           <h2>Backend Status</h2>
-          <button id="refresh-status-btn" type="button">Refresh</button>
+          <div class="actions">
+            <button id="cancel-request-btn" type="button" hidden>Cancel</button>
+            <button id="refresh-status-btn" type="button">Refresh</button>
+          </div>
         </div>
         <div id="backend-status-card" class="status-card status-idle">
           <strong id="backend-status-text">Chưa kiểm tra backend</strong>
           <span id="backend-status-detail">Cần gọi /health để xác nhận local API sẵn sàng.</span>
+          <div id="backend-status-progress" class="status-progress-block" hidden>
+            <div class="status-progress-head">
+              <span id="backend-status-progress-label" class="status-progress-label"></span>
+              <span id="backend-status-progress-percent" class="status-progress-percent"></span>
+            </div>
+            <div class="status-progress-bar" aria-hidden="true">
+              <span id="backend-status-progress-fill" class="status-progress-fill"></span>
+            </div>
+            <div class="status-metrics">
+              <span id="backend-status-elapsed" class="status-metric"></span>
+              <span id="backend-status-eta" class="status-metric"></span>
+              <span id="backend-status-timeout" class="status-metric"></span>
+            </div>
+          </div>
         </div>
         <div id="global-banner" class="banner" hidden></div>
       </section>
@@ -110,7 +127,7 @@
         </form>
       </section>
 
-      <section class="panel result-panel">
+      <section class="panel workflow-panel result-panel">
         <div class="panel-header">
           <h2>Result</h2>
           <span id="result-kind" class="hint">Chưa có audio</span>
