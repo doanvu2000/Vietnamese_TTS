@@ -2,6 +2,35 @@
 
 Backend local để web app gọi đúng contract PRD desktop/web.
 
+## Dùng web nhanh nhất
+
+```powershell
+# Terminal 1: chạy API
+py -3 -m backend.server
+
+# Terminal 2: chạy web tĩnh
+py -3 -m http.server 8080 -d web
+```
+
+Mở:
+
+- Web demo: `http://127.0.0.1:8080`
+- API mặc định: `http://127.0.0.1:8000`
+
+Cách dùng nhanh:
+
+1. Mở web demo.
+2. Bấm `Refresh` để kiểm tra backend và tải danh sách voice.
+3. Dùng `Flow 01 - Synthesize` để test text-to-speech nhanh.
+4. Nếu cần, bấm `Hiện Flow 02` để mở phần `Clone Voice`.
+5. Nghe trực tiếp ở block `Output` hoặc tải file WAV xuống.
+
+Lưu ý:
+
+- File cấu hình web đang trỏ sẵn API về `127.0.0.1:8000` trong [config.js](D:/work/python/Vietnamese_TTS/web/assets/js/config.js).
+- `format` hiện hỗ trợ `wav`.
+- `mock` là backend mặc định nên web có thể test ngay cả khi chưa bật model thật.
+
 ## Chạy server
 
 ```powershell
