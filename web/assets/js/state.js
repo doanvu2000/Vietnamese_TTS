@@ -4,10 +4,14 @@ const state = {
     detail: "Chưa kiểm tra backend"
   },
   voices: [],
+  selectedVoice: "",
   busy: false,
+  pendingAction: "",
   result: {
     kind: "none",
     filename: "",
+    format: "wav",
+    sizeBytes: 0,
     blob: null,
     objectUrl: ""
   },

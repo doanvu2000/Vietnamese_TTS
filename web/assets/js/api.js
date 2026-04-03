@@ -67,13 +67,13 @@ export async function synthesize(payload) {
   return response.blob();
 }
 
-export async function cloneVoice({ text, refText, refAudioFile, speed }) {
+export async function cloneVoice({ text, refText, refAudioFile, speed, format }) {
   const formData = new FormData();
   formData.append("text", text);
   formData.append("ref_text", refText);
   formData.append("ref_audio", refAudioFile);
   formData.append("speed", String(speed));
-  formData.append("format", config.DEFAULT_AUDIO_FORMAT);
+  formData.append("format", format || config.DEFAULT_AUDIO_FORMAT);
 
   const response = await request("/v1/clone", {
     method: "POST",

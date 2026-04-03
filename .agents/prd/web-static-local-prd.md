@@ -7,8 +7,8 @@
 - [Web Sprint 04 - Hardening and Local Serve](./sprints/web-sprint-04-hardening-local-serve.md)
 
 ## 1. Mục tiêu
-- Tạo web app local bằng HTML/CSS/JS thuần để demo và kiểm tra nhanh desktop local API.
-- Web hỗ trợ đầy đủ luồng MVP: backend status, load voices, synthesize, clone giọng, playback, export WAV.
+- Ưu tiên triển khai web app local trước bằng HTML/CSS/JS thuần để demo và kiểm tra nhanh desktop local API.
+- Web hỗ trợ đầy đủ luồng MVP: backend status, load voices, synthesize, clone giọng, playback, export WAV/MP3.
 - Không tạo backend riêng; web chỉ là client local gọi đúng contract desktop API đã có.
 
 ## 2. Vai trò sản phẩm
@@ -27,12 +27,14 @@
 2. Người dùng nhập text.
 3. Trang gọi `POST /v1/synthesize`.
 4. Trang phát audio và cho phép tải WAV.
+5. Người dùng có thể chọn `wav` hoặc `mp3` trước khi synthesize.
 
 ### 3.3 Clone giọng
 1. Người dùng chọn file audio mẫu.
 2. Người dùng nhập `ref_text` và `text`.
 3. Trang gọi `POST /v1/clone`.
-4. Trang phát audio và cho phép tải WAV.
+4. Người dùng có thể chọn `wav` hoặc `mp3` cho file kết quả.
+5. Trang phát audio và cho phép tải audio đúng định dạng đã chọn.
 
 ## 4. In-scope MVP
 - HTML/CSS/JS thuần, không framework, không bundler.
@@ -45,7 +47,7 @@
   - error/status banner
 - Cấu hình API qua `window.APP_CONFIG.API_BASE_URL`.
 - Playback bằng browser audio element.
-- Download WAV từ blob kết quả.
+- Download WAV/MP3 từ blob kết quả.
 
 ## 5. Out of scope MVP
 - SSR, SPA router hoặc build pipeline.
@@ -78,7 +80,7 @@ Web giữ đúng mapping field:
 - Trang hiển thị được backend status và danh sách voices.
 - Người dùng synthesize được text và nghe lại audio.
 - Người dùng clone được bằng audio mẫu hợp lệ.
-- Người dùng tải được WAV của kết quả gần nhất.
+- Người dùng tải được WAV hoặc MP3 của kết quả gần nhất.
 - Khi backend timeout hoặc fail, UI vẫn usable sau khi retry.
 
 ## 9. Roadmap
@@ -86,10 +88,10 @@ Web giữ đúng mapping field:
 - Foundation shell, config, health, voices
 
 ### Phase 2
-- Synthesize + playback
+- Synthesize + playback + format selector
 
 ### Phase 3
-- Clone + export + state hardening
+- Clone + export WAV/MP3 + state hardening
 
 ### Phase 4
 - Local serve notes, demo polish, smoke checklist

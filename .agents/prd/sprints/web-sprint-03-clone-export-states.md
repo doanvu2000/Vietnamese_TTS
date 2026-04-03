@@ -10,17 +10,18 @@
 
 ## 3. Phạm vi
 - Thêm form clone với `text`, `ref_text`, `ref_audio`, `speed`.
+- Thêm chọn định dạng output `wav/mp3`.
 - Upload `multipart/form-data` tới `POST /v1/clone`.
 - Chuẩn hóa state `idle/loading/success/error`.
 - Hợp nhất result panel cho synthesize và clone.
 
 ## 4. Deliverables
 - Clone giọng chạy end-to-end.
-- Download/export dùng chung cho cả synthesize và clone.
+- Download/export WAV/MP3 dùng chung cho cả synthesize và clone.
 - Button enable/disable đúng theo state.
 
 ## 5. Acceptance criteria
-- Audio mẫu hợp lệ + `ref_text` đúng -> clone thành công.
+- Audio mẫu hợp lệ + `ref_text` đúng -> clone thành công với `wav` và `mp3`.
 - File audio thiếu hoặc sai định dạng -> báo lỗi rõ ràng.
 - Sau request fail, có thể submit lại mà không cần reload trang.
 

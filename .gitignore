@@ -1,0 +1,4 @@
+models/vieneu/vieneu-tts-v2-turbo.gguf
+models/vieneu/vieneu_decoder.onnx
+models/vieneu/vieneu_encoder.onnx
+models/vieneu/.cache/

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>VieNeu Local Demo</title>
+  <title>JinTTS Local Demo</title>
   <link rel="stylesheet" href="./assets/css/main.css">
 </head>
 <body>
@@ -11,7 +11,7 @@
     <header class="hero">
       <div>
         <p class="eyebrow">Local Static Demo</p>
-        <h1>VieNeu TTS Web Demo</h1>
+        <h1>Jin TTS Web Demo</h1>
         <p class="hero-copy">
           Trang demo local dùng HTML/CSS/JS thuần để kiểm tra desktop local API cho luồng synthesize và clone giọng.
         </p>
@@ -53,6 +53,13 @@
             <input id="speed-input" name="speed" type="number" min="0.5" max="2" step="0.1" value="1.0">
           </label>
 
+          <label>
+            <span>Output format</span>
+            <select id="synthesize-format-select" name="format">
+              <option value="wav">WAV</option>
+            </select>
+          </label>
+
           <label class="field-full">
             <span>Text</span>
             <textarea id="synthesize-text" name="text" rows="6" placeholder="Nhập nội dung cần chuyển giọng nói..."></textarea>
@@ -90,6 +97,13 @@
             <input id="clone-speed-input" name="speed" type="number" min="0.5" max="2" step="0.1" value="1.0">
           </label>
 
+          <label>
+            <span>Output format</span>
+            <select id="clone-format-select" name="format">
+              <option value="wav">WAV</option>
+            </select>
+          </label>
+
           <div class="actions field-full">
             <button id="clone-btn" type="submit">Clone</button>
           </div>
@@ -108,7 +122,7 @@
         <div class="actions">
           <button id="play-btn" type="button" disabled>Play</button>
           <button id="stop-btn" type="button" disabled>Stop</button>
-          <button id="download-btn" type="button" disabled>Download WAV</button>
+          <button id="download-btn" type="button" disabled>Download Audio</button>
         </div>
       </section>
     </main>

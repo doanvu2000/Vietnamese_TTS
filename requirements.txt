@@ -1,0 +1,1 @@
+# Backend API dùng Python stdlib, không bắt buộc package ngoài cho mock mode.

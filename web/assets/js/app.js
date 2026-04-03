@@ -11,6 +11,7 @@ const ui = {
   globalBanner: document.getElementById("global-banner"),
   voiceSelect: document.getElementById("voice-select"),
   speedInput: document.getElementById("speed-input"),
+  synthesizeFormatSelect: document.getElementById("synthesize-format-select"),
   synthesizeForm: document.getElementById("synthesize-form"),
   synthesizeText: document.getElementById("synthesize-text"),
   synthesizeBtn: document.getElementById("synthesize-btn"),
@@ -19,6 +20,7 @@ const ui = {
   refText: document.getElementById("ref-text"),
   refAudioInput: document.getElementById("ref-audio-input"),
   cloneSpeedInput: document.getElementById("clone-speed-input"),
+  cloneFormatSelect: document.getElementById("clone-format-select"),
   cloneBtn: document.getElementById("clone-btn"),
   resultKind: document.getElementById("result-kind"),
   resultMessage: document.getElementById("result-message"),
@@ -41,27 +43,36 @@ function render(state) {
   ui.synthesizeBtn.disabled = state.busy;
   ui.cloneBtn.disabled = state.busy;
   ui.refreshStatusBtn.disabled = state.busy;
+  ui.synthesizeBtn.textContent = state.pendingAction === "synthesize" ? "Đang synthesize..." : "Synthesize";
+  ui.cloneBtn.textContent = state.pendingAction === "clone" ? "Đang clone..." : "Clone";
+  ui.refreshStatusBtn.textContent = state.pendingAction === "refresh" ? "Đang refresh..." : "Refresh";
 
   if (!state.voices.length) {
     ui.voiceSelect.innerHTML = `<option value="">Chưa có voice</option>`;
   } else {
+    const selectedVoice = state.selectedVoice || state.voices[0]?.id || "";
     ui.voiceSelect.innerHTML = state.voices
-      .map((voice) => `<option value="${voice.id}">${voice.name || voice.id}</option>`)
+      .map((voice) => {
+        const selected = voice.id === selectedVoice ? " selected" : "";
+        return `<option value="${voice.id}"${selected}>${voice.name || voice.id}</option>`;
+      })
       .join("");
   }
 
   if (state.result.blob) {
     ui.resultKind.textContent = state.result.kind === "clone" ? "Audio clone" : "Audio synthesize";
-    ui.resultMessage.textContent = `Sẵn sàng phát hoặc tải ${state.result.filename}.`;
+    ui.resultMessage.textContent = `Đã tạo ${state.result.filename} (${formatBytes(state.result.sizeBytes)}).`;
     ui.playBtn.disabled = false;
     ui.stopBtn.disabled = false;
     ui.downloadBtn.disabled = false;
+    ui.downloadBtn.textContent = `Download ${state.result.format.toUpperCase()}`;
   } else {
     ui.resultKind.textContent = "Chưa có audio";
     ui.resultMessage.textContent = "Kết quả audio sẽ xuất hiện ở đây sau khi synthesize hoặc clone thành công.";
     ui.playBtn.disabled = true;
     ui.stopBtn.disabled = true;
     ui.downloadBtn.disabled = true;
+    ui.downloadBtn.textContent = "Download Audio";
   }
 }
 
@@ -79,20 +90,53 @@ function backendHeadline(status) {
 }
 
 function setBusy(nextBusy) {
-  setState({ busy: nextBusy });
+  setState({ busy: nextBusy, pendingAction: nextBusy ? getState().pendingAction : "" });
+}
+
+function beginAction(action) {
+  setState({
+    busy: true,
+    pendingAction: action
+  });
+}
+
+function finishAction() {
+  setState({
+    busy: false,
+    pendingAction: ""
+  });
 }
 
 function setError(message = "") {
   setState({ error: message });
 }
 
-function setResult(blob, kind) {
-  const filename = `${kind}-${Date.now()}.wav`;
+function formatBytes(sizeBytes) {
+  if (!sizeBytes) {
+    return "0 B";
+  }
+
+  if (sizeBytes < 1024) {
+    return `${sizeBytes} B`;
+  }
+
+  return `${(sizeBytes / 1024).toFixed(1)} KB`;
+}
+
+function normalizeFormat() {
+  return "wav";
+}
+
+function setResult(blob, kind, format) {
+  const normalizedFormat = normalizeFormat(format);
+  const filename = `${kind}-${Date.now()}.${normalizedFormat}`;
   const objectUrl = setAudioSource(ui.audioPlayer, blob);
   setState({
     result: {
       kind,
       filename,
+      format: normalizedFormat,
+      sizeBytes: blob.size,
       blob,
       objectUrl
     }
@@ -110,7 +154,7 @@ async function loadBackendStatus() {
     const payload = await getHealth();
     updateNestedState("backend", {
       status: payload?.status === "ok" ? "ok" : "error",
-      detail: `mode=${payload.engine_mode || "unknown"}, model_loaded=${String(payload.model_loaded)}`
+      detail: `mode=${payload.engine_mode || "unknown"}, backend=${payload.active_backend || "unknown"}, model_loaded=${String(payload.model_loaded)}`
     });
   } catch (error) {
     updateNestedState("backend", {
@@ -124,8 +168,12 @@ async function loadBackendStatus() {
 async function loadVoices() {
   try {
     const payload = await getVoices();
+    const voices = payload?.voices || [];
+    const currentState = getState();
+    const hasSelectedVoice = voices.some((voice) => voice.id === currentState.selectedVoice);
     setState({
-      voices: payload?.voices || []
+      voices,
+      selectedVoice: hasSelectedVoice ? currentState.selectedVoice : (voices[0]?.id || "")
     });
   } catch (error) {
     setError(error.message || "Không tải được danh sách voices.");
@@ -144,20 +192,22 @@ async function handleSynthesize(event) {
 
   try {
     validateText(ui.synthesizeText.value, "Text");
-    setBusy(true);
+    beginAction("synthesize");
+    const format = normalizeFormat(ui.synthesizeFormatSelect.value);
 
     const blob = await synthesize({
       text: ui.synthesizeText.value.trim(),
-      voice_id: ui.voiceSelect.value,
+      voice_id: getState().selectedVoice || ui.voiceSelect.value,
       speed: Number(ui.speedInput.value || 1),
-      format: window.APP_CONFIG.DEFAULT_AUDIO_FORMAT
+      format
     });
 
-    setResult(blob, "synthesize");
+    setResult(blob, "synthesize", format);
+    await playAudio().catch(() => undefined);
   } catch (error) {
     setError(error.message || "Synthesize thất bại.");
   } finally {
-    setBusy(false);
+    finishAction();
   }
 }
 
@@ -174,19 +224,22 @@ async function handleClone(event) {
       throw new Error("Cần chọn audio mẫu trước khi clone.");
     }
 
-    setBusy(true);
+    beginAction("clone");
+    const format = normalizeFormat(ui.cloneFormatSelect.value);
     const blob = await cloneVoice({
       text: ui.cloneText.value.trim(),
       refText: ui.refText.value.trim(),
       refAudioFile,
-      speed: Number(ui.cloneSpeedInput.value || 1)
+      speed: Number(ui.cloneSpeedInput.value || 1),
+      format
     });
 
-    setResult(blob, "clone");
+    setResult(blob, "clone", format);
+    await playAudio().catch(() => undefined);
   } catch (error) {
     setError(error.message || "Clone thất bại.");
   } finally {
-    setBusy(false);
+    finishAction();
   }
 }
 
@@ -194,7 +247,17 @@ function boot() {
   subscribe(render);
 
   ui.refreshStatusBtn.addEventListener("click", async () => {
-    await Promise.all([loadBackendStatus(), loadVoices()]);
+    beginAction("refresh");
+    try {
+      await Promise.all([loadBackendStatus(), loadVoices()]);
+    } finally {
+      finishAction();
+    }
+  });
+  ui.voiceSelect.addEventListener("change", (event) => {
+    setState({
+      selectedVoice: event.target.value
+    });
   });
   ui.synthesizeForm.addEventListener("submit", handleSynthesize);
   ui.cloneForm.addEventListener("submit", handleClone);
@@ -211,7 +274,11 @@ function boot() {
     clearAudioSource(ui.audioPlayer);
   });
 
-  Promise.all([loadBackendStatus(), loadVoices()]);
+  beginAction("refresh");
+  Promise.all([loadBackendStatus(), loadVoices()])
+    .finally(() => {
+      finishAction();
+    });
 }
 
 boot();
