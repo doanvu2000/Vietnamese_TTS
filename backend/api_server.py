@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-import cgi
+import email.parser
+import email.policy
+import io
 import json
 import logging
 import uuid
@@ -14,6 +16,64 @@ from .errors import ApiError
 
 
 LOGGER = logging.getLogger("tts_api")
+
+
+class _FormField:
+    """Single field parsed from multipart/form-data."""
+
+    def __init__(self, name: str, filename: str | None, content_type: str, data: bytes) -> None:
+        self.name = name
+        self.filename = filename
+        self.type = content_type
+        self.file = io.BytesIO(data)
+        self._data = data
+
+
+class _MultipartForm:
+    """Minimal multipart/form-data parser replacing cgi.FieldStorage (removed in Py 3.13)."""
+
+    def __init__(self, fields: dict[str, list[_FormField]]) -> None:
+        self._fields = fields
+
+    def __contains__(self, key: str) -> bool:
+        return key in self._fields
+
+    def __getitem__(self, key: str) -> _FormField:
+        return self._fields[key][0]
+
+    def getfirst(self, key: str, default: str = "") -> str:
+        if key not in self._fields:
+            return default
+        field = self._fields[key][0]
+        if field.filename:
+            return default
+        return field._data.decode("utf-8", errors="replace").strip()
+
+    @classmethod
+    def parse(cls, content_type: str, body: bytes) -> "_MultipartForm":
+        raw = f"Content-Type: {content_type}\r\n\r\n".encode() + body
+        msg = email.parser.BytesFeedParser(policy=email.policy.compat32)
+        msg.feed(raw)
+        parsed = msg.close()
+
+        fields: dict[str, list[_FormField]] = {}
+        for part in parsed.get_payload() or []:
+            disposition = part.get("Content-Disposition", "")
+            name: str | None = None
+            filename: str | None = None
+            for token in disposition.split(";"):
+                token = token.strip()
+                if token.startswith("name="):
+                    name = token[5:].strip('"')
+                elif token.startswith("filename="):
+                    filename = token[9:].strip('"')
+            if name is None:
+                continue
+            data: bytes = part.get_payload(decode=True) or b""
+            ct = part.get_content_type()
+            fields.setdefault(name, []).append(_FormField(name, filename, ct, data))
+
+        return cls(fields)
 
 
 def configure_logging() -> None:
@@ -160,7 +220,7 @@ def build_handler(context: AppContext):
 
             return payload
 
-        def _read_multipart(self):
+        def _read_multipart(self) -> _MultipartForm:
             content_type = self.headers.get("Content-Type", "")
             if "multipart/form-data" not in content_type:
                 raise ApiError(
@@ -169,14 +229,9 @@ def build_handler(context: AppContext):
                     status_code=400,
                 )
 
-            return cgi.FieldStorage(
-                fp=self.rfile,
-                headers=self.headers,
-                environ={
-                    "REQUEST_METHOD": "POST",
-                    "CONTENT_TYPE": content_type,
-                },
-            )
+            content_length = int(self.headers.get("Content-Length", "0"))
+            body = self.rfile.read(content_length)
+            return _MultipartForm.parse(content_type, body)
 
         def _required_text(self, payload: dict[str, object], field: str) -> str:
             value = str(payload.get(field, "")).strip()
