@@ -5,8 +5,8 @@ Backend local để web app gọi đúng contract PRD desktop/web.
 ## Dùng web nhanh nhất
 
 ```powershell
-# Terminal 1: chạy API
-py -3 -m backend.server
+# Terminal 1: chạy API với backend vieneu
+py -3 scripts/start_vieneu.py
 
 # Terminal 2: chạy web tĩnh
 py -3 -m http.server 8080 -d web
@@ -29,15 +29,7 @@ Lưu ý:
 
 - File cấu hình web đang trỏ sẵn API về `127.0.0.1:8000` trong [config.js](D:/work/python/Vietnamese_TTS/web/assets/js/config.js).
 - `format` hiện hỗ trợ `wav`.
-- `mock` là backend mặc định nên web có thể test ngay cả khi chưa bật model thật.
-
-## Chạy server
-
-```powershell
-py -3 -m backend.server
-```
-
-Server mặc định bind `127.0.0.1:8000`.
+- Cách chạy ưu tiên trên Windows là `py -3 scripts/start_vieneu.py`.
 
 ## Biến môi trường
 
@@ -61,31 +53,20 @@ Server mặc định bind `127.0.0.1:8000`.
 ## Smoke test
 
 ```powershell
-py -3 -m unittest tests.test_api
+py -3 -m unittest tests.test_api tests.test_start_vieneu
 ```
-
-## Chạy web demo
-
-Mở thêm một terminal:
-
-```powershell
-py -3 -m http.server 8080 -d web
-```
-
-Sau đó mở `http://127.0.0.1:8080`.
-
-Flow local:
-
-1. Chạy API ở `127.0.0.1:8000`
-2. Chạy static server cho thư mục `web/`
-3. Mở web demo và bấm `Refresh`
-4. Test `Synthesize` hoặc `Clone`
 
 ## Ghi chú
 
-- `mock` là mặc định để web demo luôn lên ngay.
-- `auto` sẽ ưu tiên SDK `vieneu` nếu máy đã cài và model truy cập được, nếu không sẽ fallback về mock.
-- Nếu muốn ép dùng engine thật bằng model local, dùng script này:
+- Launcher Python hỗ trợ:
+  `--model-dir`, `--host`, `--port`, `--backbone-file`, `--decoder-file`, `--encoder-file`
+- Có thể dùng:
+
+```powershell
+python scripts/start_vieneu.py
+```
+
+- Script PowerShell cũ vẫn giữ lại cho máy không bị chặn `ExecutionPolicy`:
 
 ```powershell
 .\scripts\start-vieneu-local.ps1
@@ -99,8 +80,4 @@ Flow local:
   `vieneu_encoder.onnx`
 - Nếu Anh muốn tự set env bằng tay, dùng mẫu ở [.env.vieneu.example](D:/work/python/Vietnamese_TTS/.env.vieneu.example).
 - Model đã được tải vào [models/vieneu](D:/work/python/Vietnamese_TTS/models/vieneu), nên script trên chạy được ngay trong project hiện tại.
-- Theo README upstream, SDK chính thức dùng `from vieneu import Vieneu`; local mode mặc định là Turbo, `list_preset_voices`, `get_preset_voice`, `infer`, `encode_reference` và `save` là các API tôi đã bám để tích hợp. Nguồn: [GitHub README](https://github.com/pnnbao97/VieNeu-TTS).
 - Nếu môi trường không truy cập được Hugging Face, Anh có thể trỏ các biến `TTS_VIENEU_*` về repo/file model nội bộ hoặc local mirror tương ứng.
-- Mock backend vẫn trả `audio/wav` hợp lệ để web demo gọi được ngay.
-- `format` hiện chỉ hỗ trợ `wav`, đúng contract desktop MVP.
-- Có thể thay mock adapter bằng tích hợp `VieNeu-TTS` thật trong `backend/engine.py`.

@@ -50,6 +50,7 @@ let backendProgressTimerId = 0;
 let activeRequestId = "";
 let activeRequestController = null;
 let clonePanelVisible = false;
+let lastSuggestedSynthesizeText = "";
 
 ui.apiBaseUrl.textContent = window.APP_CONFIG.API_BASE_URL;
 
@@ -111,6 +112,7 @@ function render(state) {
       })
       .join("");
   }
+  syncSuggestedSynthesizeText();
 
   if (state.result.blob) {
     ui.resultPanel.dataset.state = "ready";
@@ -296,6 +298,31 @@ function normalizeFormat() {
   return "wav";
 }
 
+function getSelectedVoiceName() {
+  const state = getState();
+  const selectedVoiceId = state.selectedVoice || ui.voiceSelect.value;
+  const selectedVoice = state.voices.find((voice) => voice.id === selectedVoiceId);
+  return selectedVoice?.name || selectedVoiceId || "mặc định";
+}
+
+function buildDefaultSynthesizeText(voiceName) {
+  return `Xin chào, mình là AI giọng ${voiceName}, sẵn sàng phục vụ`;
+}
+
+function syncSuggestedSynthesizeText({ force = false } = {}) {
+  const suggestedText = buildDefaultSynthesizeText(getSelectedVoiceName());
+  const currentValue = ui.synthesizeText.value.trim();
+  const shouldApply =
+    force ||
+    !currentValue ||
+    currentValue === lastSuggestedSynthesizeText;
+
+  lastSuggestedSynthesizeText = suggestedText;
+  if (shouldApply) {
+    ui.synthesizeText.value = suggestedText;
+  }
+}
+
 function setResult(blob, kind, format) {
   const normalizedFormat = normalizeFormat(format);
   const filename = `${kind}-${Date.now()}.${normalizedFormat}`;
@@ -344,6 +371,7 @@ async function loadVoices() {
       voices,
       selectedVoice: hasSelectedVoice ? currentState.selectedVoice : (voices[0]?.id || "")
     });
+    syncSuggestedSynthesizeText({ force: !ui.synthesizeText.value.trim() });
   } catch (error) {
     setError(error.message || "Không tải được danh sách voices.");
   }
@@ -458,6 +486,7 @@ async function handleCancelCurrentRequest() {
 
 function boot() {
   subscribe(render);
+  lastSuggestedSynthesizeText = ui.synthesizeText.value.trim();
 
   ui.refreshStatusBtn.addEventListener("click", async () => {
     beginAction("refresh");
@@ -471,6 +500,7 @@ function boot() {
     setState({
       selectedVoice: event.target.value
     });
+    syncSuggestedSynthesizeText();
   });
   ui.synthesizeForm.addEventListener("submit", handleSynthesize);
   ui.cloneForm.addEventListener("submit", handleClone);
