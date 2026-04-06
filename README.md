@@ -5,6 +5,9 @@ Backend local để web app gọi đúng contract PRD desktop/web.
 ## Dùng web nhanh nhất
 
 ```powershell
+# Neu may chua co Python/package, chay 1 lan:
+.\scripts\setup_windows.cmd
+
 # Terminal 1: chạy API với backend vieneu
 py -3 scripts/start_vieneu.py
 
@@ -30,6 +33,7 @@ Lưu ý:
 - File cấu hình web đang trỏ sẵn API về `127.0.0.1:8000` trong [config.js](D:/work/python/Vietnamese_TTS/web/assets/js/config.js).
 - `format` hiện hỗ trợ `wav`.
 - Cách chạy ưu tiên trên Windows là `py -3 scripts/start_vieneu.py`.
+- Nếu máy chưa có Python hoặc chưa cài package `vieneu`, chạy `.\scripts\setup_windows.cmd` trước.
 
 ## Biến môi trường
 
@@ -60,6 +64,8 @@ py -3 -m unittest tests.test_api tests.test_start_vieneu
 
 - Launcher Python hỗ trợ:
   `--model-dir`, `--host`, `--port`, `--backbone-file`, `--decoder-file`, `--encoder-file`
+- Bootstrap Windows sẽ:
+  cài Python bằng `winget` nếu thiếu, nâng cấp `pip`, cài `requirements.txt` và `requirements-vieneu.txt`
 - Có thể dùng:
 
 ```powershell
