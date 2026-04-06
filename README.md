@@ -5,14 +5,21 @@ Backend local để web app gọi đúng contract PRD desktop/web.
 ## Dùng web nhanh nhất
 
 ```powershell
-# Neu may chua co Python/package, chay 1 lan:
+# Cach nhanh nhat tren Windows: setup va tu mo API + web
 .\scripts\setup_windows.cmd
 
-# Terminal 1: chạy API với backend vieneu
+# Neu may dang bi chuyen huong proxy/no-index:
+.\scripts\setup_windows_local.cmd
+
+# Hoac neu da setup xong, chay tay:
 py -3 scripts/start_vieneu.py
 
-# Terminal 2: chạy web tĩnh
+# Va web static:
 py -3 -m http.server 8080 -d web
+
+# Hoac dung launcher Windows co san:
+.\scripts\run_api_vieneu.cmd
+.\scripts\run_web_demo.cmd
 ```
 
 Mở:
@@ -33,7 +40,11 @@ Lưu ý:
 - File cấu hình web đang trỏ sẵn API về `127.0.0.1:8000` trong [config.js](D:/work/python/Vietnamese_TTS/web/assets/js/config.js).
 - `format` hiện hỗ trợ `wav`.
 - Cách chạy ưu tiên trên Windows là `py -3 scripts/start_vieneu.py`.
-- Nếu máy chưa có Python hoặc chưa cài package `vieneu`, chạy `.\scripts\setup_windows.cmd` trước.
+- `.\scripts\setup_windows.cmd` sẽ setup xong rồi tự mở luôn API + web demo.
+- Nếu máy đang bị chặn mạng package manager, script vẫn mở web demo; phần API `vieneu` sẽ báo lỗi riêng.
+- Nếu máy đang dính env proxy/no-index nội bộ, ưu tiên `.\scripts\setup_windows_local.cmd`.
+- Nếu muốn mở tay từng cửa sổ trên Windows, dùng:
+  `.\scripts\run_api_vieneu.cmd` và `.\scripts\run_web_demo.cmd`
 
 ## Biến môi trường
 
@@ -65,7 +76,12 @@ py -3 -m unittest tests.test_api tests.test_start_vieneu
 - Launcher Python hỗ trợ:
   `--model-dir`, `--host`, `--port`, `--backbone-file`, `--decoder-file`, `--encoder-file`
 - Bootstrap Windows sẽ:
-  cài Python bằng `winget` nếu thiếu, nâng cấp `pip`, cài `requirements.txt` và `requirements-vieneu.txt`
+  cài Python bằng `winget` nếu thiếu, nâng cấp `pip`, cài `requirements.txt`, cài `requirements-vieneu.txt`, rồi tự mở API + web
+- Nếu `pip`/`git` bị chặn bởi proxy hoặc `PIP_NO_INDEX`, script sẽ in hint để Anh xử lý env trước.
+- `setup_windows_local.cmd` sẽ clear tạm:
+  `ALL_PROXY`, `HTTP_PROXY`, `HTTPS_PROXY`, `GIT_HTTP_PROXY`, `GIT_HTTPS_PROXY`, `PIP_NO_INDEX`, `PIP_INDEX_URL`, `PIP_EXTRA_INDEX_URL`
+- Nếu chỉ muốn cài package mà chưa mở app:
+  `.\scripts\setup_windows.cmd --setup-only`
 - Có thể dùng:
 
 ```powershell
